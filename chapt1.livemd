@@ -1,6 +1,6 @@
 # Iris Classification
 
-## Section
+## Chapt 1
 
 ```elixir
   Mix.install([
