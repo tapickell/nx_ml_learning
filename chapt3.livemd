@@ -136,3 +136,26 @@ Vl.new(title: "Berry Profits", width: 1440, height: 1000)
 )
 
 ```
+
+```elixir
+defmodule GradFun do
+  @moduledoc "Calculate the gradient of a simple function"
+  import Nx.Defn
+
+  defn my_function(x) do
+    x
+    |> Nx.cos()
+    |> Nx.exp()
+    |> Nx.sum()
+    |> print_expr()
+  end
+
+  defn grad_my_function(x) do
+    grad(x, &my_function/1) |> print_expr()
+  end
+end
+```
+
+```elixir
+GradFun.grad_my_function(Nx.tensor([1.0,2.0,3.0]))
+```
