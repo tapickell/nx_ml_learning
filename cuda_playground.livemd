@@ -1,0 +1,65 @@
+# Untitled notebook
+
+## Section
+
+```elixir
+Mix.install(
+  [
+    {:nx, "~> 0.6.1"},
+    {:exla, "~> 0.6.1"},
+    {:benchee, "~> 1.3"}
+  ],
+  config: [
+    nx: [
+      default_backend: EXLA.Backend,
+      default_defn_options: [compiler: EXLA]
+    ],
+    exla: [
+      default_client: :cuda,
+      clients: [
+        cuda: [platform: :cuda, preallocate: false]
+      ]
+    ]
+  ],
+  system_env: [
+    XLA_TARGET: "cuda120"
+  ]
+)
+```
+
+```elixir
+Nx.with_default_backend({EXLA.Backend, client: :cuda}, fn ->
+  Nx.iota({10, 10})
+  |> Nx.add(10)
+end)
+```
+
+```elixir
+defmodule TestingSoftmax do
+  import Nx.Defn
+
+  defn soft_max(t), do: Nx.exp(t) / Nx.sum(Nx.exp(t))
+end
+```
+
+```elixir
+key = Nx.Random.key(42)
+{tensor, _key} = Nx.Random.uniform(key, shape: {1_000_000})
+
+Benchee.run(
+  %{
+    "JIT w/ EXLA" => fn ->
+      apply(EXLA.jit(&TestingSoftmax.soft_max/1, compiler: EXLA), [tensor])
+      end,
+    "Compiler Cuda" => fn ->
+      Nx.with_default_backend({EXLA.Backend, client: :cuda}, fn ->
+         Nx.exp(tensor) / Nx.sum(Nx.exp(tensor))
+        end)
+      end,
+    "Regular ELixir" => fn ->
+      TestingSoftmax.soft_max(tensor)
+    end
+  },
+  time: 10
+)
+```
