@@ -1,6 +1,6 @@
-# Thinking in Tensors
+# Chapt 2
 
-## Chapt 2
+## Thinking in Tensors
 
 ```elixir
   Mix.install([
