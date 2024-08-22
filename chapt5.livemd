@@ -1,0 +1,140 @@
+# Chapt5 notebook
+
+## Section
+
+```elixir
+Mix.install([
+  {:axon, "~> 0.6.1"},
+  {:nx, "~> 0.7.3"},
+  {:exla, "~> 0.7.3"},
+  {:bumblebee, "~> 0.5.3"},
+  # {:explorer, "~> 0.9.1"},
+  {:kino, "~> 0.13.2"},
+  {:kino_vega_lite, "~> 0.1.13"},
+  {:vega_lite, "~> 0.1.9"},
+  {:tucan, "~> 0.3.0"},
+  {:stb_image, "~> 0.6.9"},
+  {:benchee, "~> 1.3"},
+  {:scholar, "~> 0.3.1"},
+  {:scidata, "~> 0.1.11"}
+],
+  config: [
+    nx: [
+      default_backend: EXLA.Backend,
+      default_defn_options: [compiler: EXLA]
+    ]
+  ]
+)
+
+```
+
+```elixir
+m = :rand.uniform() * 10
+b = :rand.uniform() * 10
+key = Nx.Random.key(42)
+size = 100
+
+{x, new_key} = Nx.Random.normal(key, 0.0, 1.0, shape: {size, 1})
+{noise_x, new_key} = Nx.Random.normal(new_key, 0.0, 1.0, shape: {size, 1})
+
+y = m
+|> Nx.multiply(Nx.add(x, noise_x))
+|> Nx.add(b)
+```
+
+```elixir
+alias VegaLite, as: Vl
+
+Vl.new(title: "Scatterplot", width: 720, height: 480)
+|> Vl.data_from_values(%{
+  x: Nx.to_flat_list(x),
+  y: Nx.to_flat_list(y)
+})
+|> Vl.mark(:point)
+|> Vl.encode_field(:x, "x", type: :quantitative)
+|> Vl.encode_field(:y, "y", type: :quantitative)
+```
+
+```elixir
+model = Scholar.Linear.LinearRegression.fit(x, y)
+```
+
+```elixir
+Scholar.Linear.LinearRegression.predict(model, Nx.iota({3, 1}))
+```
+
+```elixir
+pred_xs = Nx.linspace(-3.0, 3.0, n: 100) |> Nx.new_axis(-1)
+pred_ys = Scholar.Linear.LinearRegression.predict(model, pred_xs)
+```
+
+```elixir
+title = "Scatterplot Distribution and Fit Curve"
+Vl.new(title: title, width: 720, height: 480)
+|> Vl.data_from_values(%{
+  x: Nx.to_flat_list(x),
+  y: Nx.to_flat_list(y),
+  pred_x: Nx.to_flat_list(pred_xs),
+  pred_y: Nx.to_flat_list(pred_ys)
+})
+|> Vl.layers([
+  Vl.new()
+  |> Vl.mark(:point)
+  |> Vl.encode_field(:x, "x", type: :quantitative)
+  |> Vl.encode_field(:y, "y", type: :quantitative),
+
+  Vl.new()
+  |> Vl.mark(:line)
+  |> Vl.encode_field(:x, "pred_x", type: :quantitative)
+  |> Vl.encode_field(:y, "pred_y", type: :quantitative)
+])
+
+```
+
+```elixir
+{inputs, targets} = Scidata.Wine.download()
+
+{train, test} = inputs
+|> Enum.zip(targets)
+|> Enum.shuffle()
+|> Enum.split(floor(length(inputs) * 0.8))
+
+{train_inputs, train_targets} = Enum.unzip(train)
+train_inputs = Nx.tensor(train_inputs)
+train_targets = Nx.tensor(train_targets)
+
+{test_inputs, test_targets} = Enum.unzip(test)
+test_inputs = Nx.tensor(test_inputs)
+test_targets = Nx.tensor(test_targets)
+
+train_inputs = Scholar.Preprocessing.min_max_scale(train_inputs)
+test_inputs = Scholar.Preprocessing.min_max_scale(test_inputs)
+
+model = Scholar.Linear.LogisticRegression.fit(
+  train_inputs,
+  train_targets,
+  num_classes: 3
+)
+
+```
+
+```elixir
+test_preds = Scholar.Linear.LogisticRegression.predict(model, test_inputs)
+Scholar.Metrics.Classification.accuracy(test_targets, test_preds)
+```
+
+```elixir
+Scholar.Metrics.Classification.confusion_matrix(test_targets, test_preds, num_classes: 3)
+```
+
+```elixir
+Vl.new(title: "Confusion Matrix", width: 1440, height: 1080)
+|> Vl.data_from_values(%{
+  predicted: Nx.to_flat_list(test_preds),
+  actual: Nx.to_flat_list(test_targets)
+})
+|> Vl.mark(:rect)
+|> Vl.encode_field(:x, "predicted")
+|> Vl.encode_field(:y, "actual")
+|> Vl.encode(:color, aggregate: :count)
+```

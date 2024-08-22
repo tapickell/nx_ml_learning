@@ -219,3 +219,28 @@ uuid = Pkl.UUID.gen_v4()
 |> IO.inspect()
 Ecto.UUID.cast(uuid)
 ```
+
+```elixir
+defmodule Pkl.Limits do
+  def limit(1), do: :would_raise_div_by_zero
+  def limit(n) do
+    ((n ** 2) - 1) / (n - 1)
+  end
+end
+```
+
+```elixir
+Pkl.Limits.limit(2) |> IO.inspect()
+Pkl.Limits.limit(0.9) |> IO.inspect()
+Pkl.Limits.limit(0.999) |> IO.inspect()
+Pkl.Limits.limit(0.999999999) |> IO.inspect()
+Pkl.Limits.limit(1.1) |> IO.inspect()
+Pkl.Limits.limit(1.01) |> IO.inspect()
+Pkl.Limits.limit(1.0000000001) |> IO.inspect()
+Pkl.Limits.limit(1)
+
+```
+
+```elixir
+
+```
