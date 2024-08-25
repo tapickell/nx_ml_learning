@@ -1,6 +1,6 @@
 # Calculus notebook
 
-## Section
+## ML Section
 
 ```elixir
   Mix.install([
@@ -83,6 +83,29 @@ end
 |> Tucan.set_title("Calculus Limits; (-1.01, -0.99), (0.99, 1.01)")
 
 ```
+
+```elixir
+defmodule Pkl.Limits do
+  def limit(1), do: :would_raise_div_by_zero
+  def limit(n) do
+    ((n ** 2) - 1) / (n - 1)
+  end
+end
+```
+
+```elixir
+Pkl.Limits.limit(2) |> IO.inspect()
+Pkl.Limits.limit(0.9) |> IO.inspect()
+Pkl.Limits.limit(0.999) |> IO.inspect()
+Pkl.Limits.limit(0.999999999) |> IO.inspect()
+Pkl.Limits.limit(1.1) |> IO.inspect()
+Pkl.Limits.limit(1.01) |> IO.inspect()
+Pkl.Limits.limit(1.0000000001) |> IO.inspect()
+Pkl.Limits.limit(1)
+
+```
+
+## UUID & Data Structure playground
 
 ```elixir
 """
@@ -221,26 +244,137 @@ Ecto.UUID.cast(uuid)
 ```
 
 ```elixir
-defmodule Pkl.Limits do
-  def limit(1), do: :would_raise_div_by_zero
-  def limit(n) do
-    ((n ** 2) - 1) / (n - 1)
+defmodule AccessTree do
+  @moduledoc """
+  A simple data structure to handle resolving the heiarchy of 
+  Obligation Type -> Obligation SubType -> ObligationLineItem Type
+    
+    iex> [
+    ...>   %{
+    ...>     name: "express_factoring_fee",
+    ...>     parent: "servicing_fee",
+    ...>     type: :ob_li_type
+    ...>   },
+    ...>   %{
+    ...>     name: "servicing_fee",
+    ...>     parent: "earnings",
+    ...>     type: :ob_sub_type
+    ...>   },
+    ...>   %{
+    ...>     name: "earnings",
+    ...>     parent: :root_node,
+    ...>     type: :ob_type
+    ...>   }
+    ...> ]
+    ...> |>  AccessTree.resolve_path("express_factoring_fee")
+    ["earnings", "servicing_fee", "express_factoring_fee"]
+  
+  """
+  def resolve_path(nodes, name) do
+    resolve_path(nodes, name, [])
+  end
+
+  defp resolve_path(_nodes, :root_node, acc), do: acc
+  
+  defp resolve_path(nodes, name, acc) do
+    case by_name(nodes, name) do
+      :not_found -> [:not_found | acc]
+      parent ->
+        resolve_path(nodes, parent, [name | acc])
+    end
+  end
+
+  defp by_name(nodes, name, key \\ :parent) do
+    case get_in(nodes, [Access.filter(&(&1.name == name)), key]) do
+      [] -> :not_found
+      [nil] -> :not_found
+      [value] -> value
+    end
   end
 end
 ```
 
 ```elixir
-Pkl.Limits.limit(2) |> IO.inspect()
-Pkl.Limits.limit(0.9) |> IO.inspect()
-Pkl.Limits.limit(0.999) |> IO.inspect()
-Pkl.Limits.limit(0.999999999) |> IO.inspect()
-Pkl.Limits.limit(1.1) |> IO.inspect()
-Pkl.Limits.limit(1.01) |> IO.inspect()
-Pkl.Limits.limit(1.0000000001) |> IO.inspect()
-Pkl.Limits.limit(1)
+defmodule TypesHiearchy do
+    @moduledoc """
+  A simple data structure to handle resolving the heiarchy of
+  Obligation Type -> Obligation SubType -> ObligationLineItem Type
 
-```
+    iex> TypesHierarchy.resolve_path("express_factoring_fee")
+    ["earnings", "servicing_fee", "express_factoring_fee"]
 
-```elixir
+  """
+  def resolve_path(name) do
+    resolve_path(nodes(), name)
+  end
 
+  def resolve_path(nodes, name) do
+    resolve_path(nodes, name, [])
+  end
+
+  defp resolve_path(_nodes, :root_node, acc), do: acc
+
+  defp resolve_path(nodes, name, acc) do
+    case by_name(nodes, name) do
+      :not_found ->
+        [:not_found | acc]
+
+      parent ->
+        resolve_path(nodes, parent, [name | acc])
+    end
+  end
+
+  defp by_name(nodes, name, key \\ :parent) do
+    case get_in(nodes, [Access.filter(&(&1.name == name)), key]) do
+      [] -> :not_found
+      [nil] -> :not_found
+      [value] -> value
+    end
+  end
+
+  def nodes do
+    [ob_li_types() | [ob_sub_types() | ob_types()]]
+  end
+
+  # TODO servicing_fee/servicing_fee subtype->type
+  # TODO advance/base_amount && primary/base_amount subtype->type
+  # TODO need adjustments parent
+  defp ob_li_types do
+    [
+      %{name: "base_amount", parent: "advance", type: :ob_li_type},
+      %{name: "base_amount", parent: "primary", type: :ob_li_type},
+      %{name: "instantpay", parent: "FIXME", type: :ob_li_type},
+      %{name: "adjustment", parent: "FIXME", type: :ob_li_type},
+      %{name: "quickpay", parent: "advance", type: :ob_li_type},
+      %{name: "accessorial_fee", parent: "primary", type: :ob_li_type},
+      %{name: "express_factoring_fee", parent: "servicing_fee", type: :ob_li_type},
+      %{name: "non_factoring_fee", parent: "servicing_fee", type: :ob_li_type},
+      %{name: "primary_receivable_fee", parent: "servicing_fee", type: :ob_li_type},
+      %{name: "servicing_fee", parent: "servicing_fee", type: :ob_li_type}
+    ]
+  end
+
+  # TODO client has no parent yet, not stored in DB, used when different due date for advance
+  # TODO receivable/primary & payable/primary type->subtype
+  defp ob_sub_types do
+    [
+      %{name: "primary", parent: "receivable", type: :ob_sub_type},
+      %{name: "primary", parent: "payable", type: :ob_sub_type},
+      %{name: "client", parent: "FIXME", type: :ob_sub_type},
+      %{name: "servicing_fee", parent: "earnings", type: :ob_sub_type},
+      %{name: "factoring_fee", parent: "earnings", type: :ob_sub_type},
+      %{name: "advance", parent: "payable", type: :ob_sub_type},
+      %{name: "rebate", parent: "payable", type: :ob_sub_type},
+      %{name: "prefunding", parent: "receivable", type: :ob_sub_type}
+    ]
+  end
+
+  defp ob_types do
+    [
+      %{name: "earnings", parent: :root_node, type: :ob_type},
+      %{name: "receivable", parent: :root_node, type: :ob_type},
+      %{name: "payable", parent: :root_node, type: :ob_type}
+    ]
+  end
+end
 ```

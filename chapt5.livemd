@@ -128,7 +128,7 @@ Scholar.Metrics.Classification.confusion_matrix(test_targets, test_preds, num_cl
 ```
 
 ```elixir
-Vl.new(title: "Confusion Matrix", width: 1440, height: 1080)
+Vl.new(title: "Confusion Matrix", width: 720, height: 480)
 |> Vl.data_from_values(%{
   predicted: Nx.to_flat_list(test_preds),
   actual: Nx.to_flat_list(test_targets)
