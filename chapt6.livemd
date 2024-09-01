@@ -1,7 +1,64 @@
 # Chapt 6 notebook
 
+```elixir
+Mix.install([
+  {:axon, "~> 0.6.1"},
+  {:nx, "~> 0.7.3"},
+  {:exla, "~> 0.7.3"},
+  {:bumblebee, "~> 0.5.3"},
+  # {:explorer, "~> 0.9.1"},
+  {:kino, "~> 0.13.2"},
+  {:kino_vega_lite, "~> 0.1.13"},
+  {:vega_lite, "~> 0.1.9"},
+  {:tucan, "~> 0.3.0"},
+  # {:stb_image, "~> 0.6.9"},
+  # {:benchee, "~> 1.3"},
+  {:scholar, "~> 0.3.1"},
+  {:scidata, "~> 0.1.11"}
+],
+  config: [
+    nx: [
+      default_backend: EXLA.Backend,
+      default_defn_options: [compiler: EXLA]
+    ]
+  ]
+)
+
+```
+
 ## Go Deep w/ Axon
 
 ```elixir
+defmodule NeuralNetwork do
+  import Nx.Defn
 
+  defn predict(input, w1, b1, w2, b2) do
+    input
+    |> hidden(w1, b1)
+    |> output(w2, b2)
+  end
+
+  defn hidden(input, weight, bias) do
+    input
+    |> dense(weight, bias)
+    |> activation()
+  end
+
+  #defndelegate hidden/3
+  defn output(input, weight, bias) do
+    input
+    |> dense(weight, bias)
+    |> activation()
+  end
+  
+  defn dense(input, weight, bias) do
+    input
+    |> Nx.dot(weight)
+    |> Nx.add(bias)
+  end
+
+  defn activation(input) do
+    Nx.sigmoid(input)
+  end
+end
 ```
