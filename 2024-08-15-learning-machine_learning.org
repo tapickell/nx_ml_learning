@@ -1,0 +1,391 @@
+:PROPERTIES:
+:ID:       38B67C32-6CB6-4104-8CB7-E99DDCD26D1E
+:END:
+#+title: Learning machine learning
+#+date: [2024-08-15 Thu 20:31]
+#+filetags: :learning:
+* machine learning
+Nx Elixir Machine Learning
+Deep Learning in Python book by Francia Loare ???
+8-9 step process
+1. Do I need machine learning to solve this problem? or can we just solve this with something clever
+2. Get a good clean dataset to start from, this can be the hardest thing. Pipeline that in (ETL)
+3. Livebook / Explorer to look at dataset, visualize, analyze, explore the data
+4. Cleaning up data, remove outliers, transform data for training, categorize columns
+5. Model selection process, what type of machine learning model should I use, maybe train 3 different models judge per/accuracy of each
+6. Implementation process
+7. Feedback cycle, rinse and repeat
+
+#+begin_comment
+All quotes are an Excerpt From "Machine Learning in Elixir"
+Sean Moriarity
+This material may be protected by copyright.
+#+end_comment
+* Machines require to learn:
+** Task
+*** Task Categories
+#+begin_quote
+“You can frame most machine learning tasks into one of two major categories:
+1. Classification
+   - Assigning labels to inputs
+2. Regression”
+   - Assigning numeric values to inputs
+#+end_quote
+*** Tasks should be
+- Specific
+- Measurable
+- Achievable
+- Relevant
+- Time-bound
+** Performance measure
+*** Performance measure is measuring a models progress
+- Accuracy in classification
+- Absolute error in regression
+#+begin_quote
+“The process of creating and training models is often defined as an optimization task”
+“The direct or indirect measure of success you use to optimize your performance measure is known as a loss function or cost function”
+“A loss function is the measure of the “goodness” of a model. ”
+#+end_quote
+- define minimum thresholds, 85%+
+** Experience
+*** Improving from experience
+*** Leaning problems
+
+* Notes
+#+begin_quote
+“ You can usually put a learning problem into one of two categories based on the type of experiences you want your model to have:
+1. Supervised learning
+2. Unsupervised learning”
+#+end_quote
+**** Supervised learning
+“Supervised learning uses data or experiences with labels or targets. ”
+**** Unsupervised learning”
+“Unsupervised learning uses data without labels.”
+#+begin_quote
+“You’ll often see the collection of experiences your model goes through called a dataset.
+More accurately, the collection of experiences your model learns from is called the training set.”
+“Typically, you train your model on a train set and evaluate your model on an unseen test set.
+Your concern is generalization (that is, how well your model generalizes to experiences it hasn’t seen).”
+“If your models are going to be used in production, you’ll need to constantly evaluate their performance as your static test set might not have accurately captured the data your model will see in production.”
+#+end_quote
+** Putting It All Together
+Overall, you can define your learning problem in the following terms:
+*** T: Classify flowers from the Iris genus into one of setosa, versicolor, or virginica species
+*** P: Accuracy of classifications (minimum 85% for success)
+*** E: Flower measurements (sepal length, sepal width, petal length, petal width, and a species label)”
+
+* Chapt 1
+** Classification Work
+#+begin_src elixir
+    Mix.install([​
+        {:axon, "~> 0.6.1"},
+        {:nx, "~> 0.7.3"},
+        {:bumblebee, "~> 0.5.3"},
+        {:explorer, "~> 0.9.1"},
+        {:kino, "~> 0.13.2"}
+    ])
+
+    require Explorer.DataFrame, as: DF
+    iris = Explorer.Datasets.iris()
+#+end_src
+
+#+begin_quote
+“ In the context of machine learning, normalizing data is the process of ensuring input features operate on a common scale”
+“There are a few ways to appropriately scale data. For instance,
+you can squeeze the values of a feature between 0 and 1 by subtracting every individual
+feature by the min value of that feature column and then dividing the result by
+the range between the max and min values across a feature. You can also compute
+a z-score for each feature. A z-score is a statistical measure that essentially
+represents a data point’s deviation from the average data point in a feature space.
+Significantly positive or negative z-scores indicate that a value is significantly
+higher or significantly lower than the rest of the data in the distribution.
+You’ll often see this type of scaling referred to as standardization.”
+#+end_quote
+
+Z-Scores / Standardization
+#+begin_src elixir
+cols = ~w(sepal_width sepal_length petal_length petal_width)
+shuffled_normalized_iris = iris
+  |> DF.mutate(
+  for col <- across(^cols) do
+    {col.name, (col - mean(col)) / standard_deviation(col)}
+  end)
+  |> DF.mutate([
+    species: Explorer.Series.cast(species, :category)
+  ])
+  |> DF.shuffle()
+#+end_src
+
+#+begin_quote
+“A common practice to validate a model’s performance is to use a test or holdout set.
+The test or holdout set is a small percentage of an original dataset,
+which you don’t present to the model during training.
+You use performance on the test set as the final evaluation of performance on your given task.
+It’s important that your model never sees examples from the test set during training.”
+#+end_quote
+
+One hot encoding of labels?? Kinda like enum to numbers 0,1,2,3 <- :a,:b,:c,:d
+
+#+begin_quote
+In normal applications we feed in data and rules and get back answers.
+In machine learning we feed in data and answers and get back rules.
+#+end_quote
+
+#+begin_quote
+“Multinomial Logistic Regression with Axon
+
+Now that you’ve wrangled your data into a format conducive to training models, it’s time to actually create and train a model.
+Training a machine learning model in Axon essentially boils down to three steps:
+1. Defining the model
+   - “When you hear the term “model” in the context of machine learning, think of a function. ”
+2. Creating an input pipeline
+   - “Axon expects input data to be in pairs of {features, targets}”
+     - features = train_data tensor -> Data
+     - targets = train_labels one-hot encoded tensor -> Answers
+     - `data_stream = Stream.repeatedly(fn -> {x_train, y_train} end)`
+3. Declaring and running the training loop
+   - “The Axon.Loop API is Axon’s primary API for training models with gradient descent.
+      A training loop is essentially a process consisting of the following steps:
+     1. Grabbing inputs from the input pipelineMaking predictions from inputs
+     2. Determining how good the predictions were
+     3. Updating the model based on prediction goodnessRepeating the steps”
+   - “a supervised training loop with
+     - the :categorical_cross_entropy loss function
+     - optimized with :sgd or stochastic-gradient descent.”
+#+end_quote
+
+#+begin_quote
+“To prove your model’s efficacy, you need to evaluate it on the test set. ”
+#+end_quote
+
+* Chapt 2
+** Tensor data types
+#+begin_quote
+| Class            | Widths        | ElixirRepresentation                  | StringRepresentation |   |
+| signed_integer   | 8, 16, 32, 64 | {:s, 8}, {:s, 16}, {:s, 32}, {:s, 64} | s8, s16, s32, s64    |   |
+| unsigned_integer | 8, 16, 32, 64 | {:u, 8}, {:u, 16}, {:u, 32}, {:u, 64} | u8, u16, u32, u64    |   |
+| float            | 16, 32, 64    | {:f, 16}, {:f, 32}, {:f, 64}          | f16, f32, f64        |   |
+| brain_float      | 16            | {:bf, 16}                             | bf16                 |   |
+| complex          | 64, 128       | {:c, 64}, {:c, 128}                   | c64, c128            |   |
+
+“ Broadcasting is the process of repeating an operation over
+the dimensions of two tensors to make their shapes compatible.”
+“ Two shapes can be broadcast together only when either of the following conditions are met:
+1. One of the shapes is a scalar.
+2. Corresponding dimensions have the same size OR one of the dimensions is size 1.
+For example, the {1, 3, 3, 2} and {4, 1, 3, 2} can be broadcast together because
+every dimension either matches or nonmatching dimensions are size 1.
+On the other hand, the shapes {1, 3, 3, 2} and {4, 2, 3, 2} cannot
+be broadcast together because the second dimension has a mismatch. ”
+#+end_quote
+** Representing the World
+#+begin_quote
+- tabular {num_examples, num_features}
+- images  {num_examples, height, width, channels}
+- videos  {num_examples, frames, height, width, channels}
+- audio   {num_examples, samples, channels}
+- text    {num_examples, sequence_length, token_features}
+#+end_quote
+
+#+begin_quote
+“ In the Deep Learning Book [GBC16], the authors identify three sources of uncertainty that will pop up in every problem:
+1. Inherent stochasticity.
+   - Some problems are inherently stochastic.
+     That means a source of uncertainty or randomness is built in. No matter what, the outcome isn’t deterministic.
+
+2. Incomplete observability.
+   - If you don’t know all of the variables dictating the behavior of a system, the system will always have an element of uncertainty.
+     In machine learning, you’ll never have access to every variable that dictates an outcome.
+
+3. Incomplete modeling.
+   - Some models discard information intentionally.
+     For example, it’s common to downsample images for faster processing.
+     Downsampling intentionally discards some information, and thus you cannot fully model the problem at hand.”
+
+#+end_quote
+
+#+begin_quote
+“Gradient-based optimization is a powerful form of optimization and is widely used in machine learning,
+especially deep learning. With automatic differentiation,
+all you need is an objective function and you can optimize it with respect to some model parameters.”
+#+end_quote
+* Calculus of the infinitesimal Chapt 3
+- Differential Calculus
+  Finding derivative - change over time
+  Optimize by finding Minima & Maxima of curves
+- Integral Calculus
+  Finding the area under a curve
+  Receiver Operating Characteristic
+  Binary Classification Model
+
+* Optimization Chapt 4
+** Learning Frameworks
+- Empirical Risk Minimization (ERM)
+- Maximum Likelihood Estimation (MLE)
+*** both are prone to Overfitting
+** 2 most common Loss Functions in ML
+- Cross Entropy
+  Can be used for categorical classification
+
+- Mean Squared Error
+  Used in place of Absolute error
+** 2 common regularization forms
+- Complexity Penalties
+  weight decay
+- Early Stopping
+  Halt when overfitting is detected
+** Implementation Stochastic Gradient Decent
+
+** Optimization Problems
+- Hyper-parameter Search
+  - Evolutionary Algorithms
+  - grid search
+- Black Box Optimization
+** Evolutionary Algorithms
+- Artificial Selection
+- AKA Genetic Algorithms ?? See his other book
+** Grid Search
+- Exhaustive Search
+- most common in ML
+
+* Traditional ML Chapt 5
+- Scholar - Trad ML Tools
+** Linear Regression
+- `y = mx + b` equation for a line
+  #+begin_src elixir
+  model = Scholar.Linear.LinearRegression.fit(x, y)
+  pred_xs = Nx.linspace(-3.0, 3.0, n: 100) |> Nx.new_axis(-1)
+  pred_ys = Scholar.Linear.LinearRegression.predict(model, pred_xs)
+  #+end_Src
+- As long as the relationship between input variables and target variables
+  can be reasonably represented with a line, you can use linear regression.
+** Logistic Regression
+- log squeezes the output to 0 and 1 for binary classification
+  #+begin_src elixir
+{inputs, targets} = Scidata.Wine.download()
+
+{train, test} = inputs
+|> Enum.zip(targets)
+|> Enum.shuffle()
+|> Enum.split(floor(length(inputs) * 0.8))
+
+{train_inputs, train_targets} = Enum.unzip(train)
+train_inputs = Nx.tensor(train_inputs)
+train_targets = Nx.tensor(train_targets)
+
+{test_inputs, test_targets} = Enum.unzip(test)
+test_inputs = Nx.tensor(test_inputs)
+test_targets = Nx.tensor(test_targets)
+
+train_inputs = Scholar.Preprocessing.min_max_scale(train_inputs)
+test_inputs = Scholar.Preprocessing.min_max_scale(test_inputs)
+
+model = Scholar.Linear.LogisticRegression.fit(
+  train_inputs,
+  train_targets,
+  num_classes: 3
+)
+
+  #+end_src
+
+** KNN Hey Neighbor
+K Nearest Neighbors can be used to regression and classification
+KNN.Classification
+
+** Unsupervised Training
+*** Clustering
+- KMeans
+- Identify similar groups of data points in a dataset.
+*** Decision Trees
+- Reaserch later on own EXGBoost
+
+* Neural Network Chapt 6
+ - A series of functions that each maniuplates some data and passes it down (piplines?)
+ - Deep learning refers to the subset of machine learning that makes use of deep models / artificial neural networks
+   #+begin_quote
+   “ANNs are named for their brain-inspired design. The transformation of inputs in an ANN is meant to simulate the firing of neurons passing information around the brain. The usage of the term ANN is probably a bit of a misnomer, as there’s little evidence to suggest the brain works in the same way that neural networks do.”
+   #+end_quote
+   - MLP Multi Layer Perceptrons, aka feed-forward layers
+   - Convolutional Neural Networks CNNs, image recognition
+   - Recurrent Neural Networks RNNs, feedback loops, time series data, forcasting
+   - Generative Adversarial Networks GANs
+** Anatomy of a Neural Network
+- Input Layers, placeholders for model inputs
+- Hidden Layers, intermediate computation layers
+  - Dense Layers, most common, 1 to 1 input to output, neuron units, hidden widths multiples of 2
+    Matrix Multiplication or Linear Transformation
+- Activations, applies nonlinear function to output from hidden layers
+  what makes it universal approximator, signals neurons on and off
+  scale or squeeze inputs into useful outputs
+  - ReLU - Rectified Linear Unit, intermediate function that computes `Nx.max(0, x)`
+  - Sigmoid- output activation, squeezes to range 0-1
+  - softmax - output activation for multi-class clissification, outputs categorical probability distrubution
+- Output Layers, final result of neural network, transformation
+  - classification - dense layer -> sigmoind | softmax ->
+  - binary classification - dense layer one output -> sigmoid ->
+  - multi class classification - dense layer N outputs -> softmax N possible classes ->
+  - scalar regression - dense layer one output -> no activation -> scalar
+
+    Each node can be thought of as an individual linear regression model ??
+    [[https://youtu.be/jmmW0F0biz0?si=rA8kDCukNS6kvxyb]]
+
+    Sigmoid is old slow learner, ReLU is faster learner and achieves same binary effect
+    [[https://youtu.be/aircAruvnKk?si=pCfvLua-HumNFlBR]]
+
+- Essentially calculus finding the minima of a function is learning
+- Learning is finding the weights and biases that minimize a certain cost function.
+- Gradient Vector - magnitude indicates sensitivity to weights and biases.
+- Back-propagation - formula for calculating negative gradient of the cost function
+- Hebbian Theory for how Neurons Learn
+  Fire together wire together.
+- Stochastic gradient descent
+- Chain Rule - Calculus for ?? getting derivate for back propagation
+*** GPT - Generative Pre-trained Transformer
+**** Transformers
+- tunable parameters = weights [matrix vector]
+  defines the model
+- Embedding Matrix
+  list of all known words
+- Un-embedding Matrix
+  end of transformations
+
+- The DOT product of two vectors is a good indicator of how well they align
+  Multiple corresponding components of the two vectors and adding the results.
+  - positive vectors point in similar directions
+  - zero if they are at right angles
+  - negative vectors point in opposite directions
+
+- Softmax - turns a list of values into a distribution
+  each value squeezed between 0..1 and all values sum to 1
+  Temperature - a weight to tune the softmax function
+  Logits -> [Softmax] -> Probabilities
+**** Attention Mechanism
+- The new addition that has caused the recent boom in AI/ML
+- Transformer breaks down word parts into vectors token embedding lookup table
+- Attention adds context so there is a different between identical in the Transformer stage
+  Calculates what needs to be added to the generic embedding to move it to the more specific
+  single head of attention
+  multiple head attention
+
+  Query vector for an Embedding vector is where the info for the attention go
+  Key vector potentially answers the Query vector, match with alignment
+  Dot Product of Key and Query pairs
+  If alignment is high (dot product high number) it is said that the embedings "attend to" the other embedding that the dot product is for
+  Then softmax the columns to give weights this is an Attention Pattern
+  Masking - take all places that would lead to future words influencing past words,
+    set to -INFINITY then when softmax is applied it is normalized to 0.0 and the distribution is kept correct
+  Value Vector applied to change the original column (value up and value down)
+  One Head of Attention (self attention head)
+
+** Linear Algebra
+- Vector - Ordered Lists of numbers
+  the length if the list determines the dimensions, 2 = 2-D in space, (x, y), 3 = 3-D in space (x, y, z)
+  A number the scales a vector is called a scalar
+
+  Derivative - tiny nudge to help solve Integral function (area under graph)
+  Integral - area under graph of function
+  Inverses of each other
+
+
+* links
+[[id:350EF677-9734-4900-8C0B-5D6A6828D624][learning]]
