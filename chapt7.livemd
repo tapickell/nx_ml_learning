@@ -31,9 +31,40 @@ Mix.install([
 
 ```elixir
 defmodule CatsAndDogs do
-  def pipeline(paths) do
+  def pipeline(paths, batch_size, target_height, target_width) do
     paths
     |> Enum.shuffle()
+    |> Task.async_stream(&parse_image/1)
+    |> Stream.filter(fn 
+      {:ok, {%StbImage{}, _}} -> true
+      _ -> false
+        end)
+    |> Stream.map(&to_tensors(&1, target_height, target_width))
+    |> Stream.chunk_every(batch_size, batch_size, :discard)
+    |> Stream.map(fn chunks ->
+      {img_chunk, label_chunk} = Enum.unzip(chunks)
+      {Nx.stack(img_chunk), Nx.stack(label_chunk)}
+    end)
+  end
+
+  defp parse_image(path) do
+    label = if String.contains?(path, "cat"), do: 0, else: 1
+
+    case StbImage.read_file(path) do
+      {:ok, img} -> {img, label}
+      _err -> :error
+    end
+  end
+
+  defp to_tensors({:ok, {img, label}}, target_height, target_width) do
+    img_tensor = img
+    |> StbImage.resize(target_height, target_width)
+    |> StbImage.to_nx()
+    |> Nx.divide(255)
+
+    label_tensor = Nx.tensor([label])
+    
+    {img_tensor, label_tensor}
   end
 end
 ```
@@ -41,6 +72,9 @@ end
 ```elixir
 {:ok, cwd} = File.cwd()
 train_path = Path.wildcard("#{cwd}/code/learn_nx_elixir/ml_nx_book/train/*.jpg")
-CatsAndDogs.pipeline(train_path)
+batch_size = 128
+target_height = target_width = 96
+CatsAndDogs.pipeline(train_path, batch_size, target_height, target_width)
+|> Enum.take(1)
 
 ```
