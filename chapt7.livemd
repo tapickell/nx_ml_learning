@@ -69,12 +69,38 @@ defmodule CatsAndDogs do
 end
 ```
 
+## Data Setup
+
 ```elixir
 {:ok, cwd} = File.cwd()
-train_path = Path.wildcard("#{cwd}/code/learn_nx_elixir/ml_nx_book/train/*.jpg")
+train_path = "#{cwd}/code/learn_nx_elixir/ml_nx_book/train/*.jpg"
+{test_paths, train_paths} = train_path
+  |> Path.wildcard()
+  |> Enum.shuffle()
+  |> Enum.split(1000)
+
 batch_size = 128
 target_height = target_width = 96
-CatsAndDogs.pipeline(train_path, batch_size, target_height, target_width)
-|> Enum.take(1)
+train_pipeline = CatsAndDogs.pipeline(train_paths, batch_size, target_height, target_width)
+test_pipeline = CatsAndDogs.pipeline(test_paths, batch_size, target_height, target_width)
 
+Enum.take(train_pipeline, 1)
+```
+
+<!-- livebook:{"branch_parent_index":1} -->
+
+## MLP Model
+
+```elixir
+mlp_model = "images"
+|> Axon.input(shape: {nil, target_height, target_width, 3})
+|> Axon.flatten()
+|> Axon.dense(256, activation: :relu)
+|> Axon.dense(128, activation: :relu)
+|> Axon.dense(1, activation: :sigmoid)
+
+mlp_trained_model_stat = mlp_model
+|> Axon.Loop.trainer(:binary_cross_entropy, :adam)
+|> Axon.Loop.metric(:accuracy)
+|> Axon.Loop.run(train_pipeline, %{}, epochs: 5, compiler: EXLA)
 ```
