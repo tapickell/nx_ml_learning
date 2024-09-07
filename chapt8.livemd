@@ -33,8 +33,8 @@ Mix.install([
 
 ```elixir
 defmodule CatsAndDogs do
-  def pipeline(paths, batch_size, target_height, target_width) do
-    paths
+  def pipeline(paths, batch_size, target_height, target_width, opts \\ []) do
+    pipeline = paths
     |> Enum.shuffle()
     |> Task.async_stream(&parse_image/1)
     |> Stream.filter(fn 
@@ -47,6 +47,22 @@ defmodule CatsAndDogs do
       {img_chunk, label_chunk} = Enum.unzip(chunks)
       {Nx.stack(img_chunk), Nx.stack(label_chunk)}
     end)
+
+    if Keyword.get(opts, :test_image, false) do
+      test_image = paths
+      |> Enum.shuffle()
+      |> Enum.take_random(1)
+      |> hd()
+      |> parse_image()
+      |> case do
+        {img, label} -> to_tensors({:ok, {img, label}}, target_height, target_width)
+        :error -> {:error, :error_converting_image}
+      end
+
+      {pipeline, test_image}
+    else
+      pipeline
+    end
   end
 
   def pipeline_with_aug(paths, batch_size, target_height, target_width) do
@@ -111,7 +127,7 @@ batch_size = 32
 target_height = target_width = 160
 train_pipeline = CatsAndDogs.pipeline_with_aug(train_paths, batch_size, target_height, target_width)
 val_pipeline = CatsAndDogs.pipeline(val_paths, batch_size, target_height, target_width)
-test_pipeline = CatsAndDogs.pipeline(test_paths, batch_size, target_height, target_width)
+{test_pipeline, test_image} = CatsAndDogs.pipeline(test_paths, batch_size, target_height, target_width, test_image: true)
 
 Enum.take(train_pipeline, 1)
 ```
@@ -169,4 +185,34 @@ trained_model_state = model
   epochs: 100,
   compiler: EXLA
 )
+```
+
+```elixir
+eval_model = Axon.sigmoid(model)
+
+eval_model
+|> Axon.Loop.evaluator()
+|> Axon.Loop.metric(:accuracy)
+|> Axon.Loop.run(test_pipeline, trained_model_state, compiler: EXLA)
+```
+
+```elixir
+{_, predict_fn} = Axon.build(eval_model, compiler: EXLA)
+```
+
+```elixir
+      test_image = test_paths
+      |> Enum.shuffle()
+      |> Enum.take_random(1)
+      |> hd()
+      |> parse_image()
+      |> case do
+        {img, label} -> to_tensors({:ok, {img, label}}, target_height, target_width)
+        :error -> {:error, :error_converting_image}
+      end
+
+test_image
+# |> Nx.new_axis(0)
+|> then(&predict_fn.(trained_model_state, &1))
+|> Nx.argmax()
 ```
