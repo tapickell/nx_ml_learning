@@ -190,10 +190,6 @@ cnn_model
 |> Axon.Loop.run(test_pipeline, cnn_trained_model_state, compiler: EXLA)
 ```
 
-<!-- livebook:{"branch_parent_index":0} -->
-
-## Augmenting Data
-
 ```elixir
 
 {:ok, cwd} = File.cwd()
@@ -212,6 +208,10 @@ test_pipeline = CatsAndDogs.pipeline(test_paths, batch_size, target_height, targ
 
 Enum.take(train_pipeline, 1)
 ```
+
+<!-- livebook:{"branch_parent_index":0} -->
+
+## Augmenting Data
 
 ```elixir
 cnn_model = Axon.input("images", shape: {nil, 96, 96, 3})

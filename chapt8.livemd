@@ -1,0 +1,172 @@
+<!-- livebook:{"file_entries":[{"name":"mobilenetv2-7.onnx","type":"attachment"}]} -->
+
+# Chapt8 notebook
+
+```elixir
+Mix.install([
+  # {:benchee, "~> 1.3"},
+  # {:explorer, "~> 0.9.1"},
+  {:axon_onnx, git: "https://github.com/mortont/axon_onnx.git", branch: "master"},
+  {:axon, "~> 0.5"},
+  {:nx, "~> 0.5"},
+  {:exla, "~> 0.5"},
+  {:stb_image, "~> 0.6"},
+  {:kino, "~> 0.8"},
+  # {:bumblebee, "~> 0.5.3"},
+  # {:kino_vega_lite, "~> 0.1.13"},
+  # {:scholar, "~> 0.3.1"},
+  # {:scidata, "~> 0.1.11"},
+  # {:table_rex, "~> 3.1"},
+  # {:tucan, "~> 0.3.0"},
+  # {:vega_lite, "~> 0.1.9"},
+] ,
+   config: [
+     nx: [
+       default_backend: EXLA.Backend,
+       default_defn_options: [compiler: EXLA]
+     ]
+   ]
+)
+```
+
+## Pipeline
+
+```elixir
+defmodule CatsAndDogs do
+  def pipeline(paths, batch_size, target_height, target_width) do
+    paths
+    |> Enum.shuffle()
+    |> Task.async_stream(&parse_image/1)
+    |> Stream.filter(fn 
+      {:ok, {%StbImage{}, _}} -> true
+      _ -> false
+        end)
+    |> Stream.map(&to_tensors(&1, target_height, target_width))
+    |> Stream.chunk_every(batch_size, batch_size, :discard)
+    |> Stream.map(fn chunks ->
+      {img_chunk, label_chunk} = Enum.unzip(chunks)
+      {Nx.stack(img_chunk), Nx.stack(label_chunk)}
+    end)
+  end
+
+  def pipeline_with_aug(paths, batch_size, target_height, target_width) do
+    paths
+    |> Enum.shuffle()
+    |> Task.async_stream(&parse_image/1)
+    |> Stream.filter(fn 
+      {:ok, {%StbImage{}, _}} -> true
+      _ -> false
+        end)
+    |> Stream.map(&to_tensors(&1, target_height, target_width))
+    |> Stream.map(&random_flip(&1, :height))
+    |> Stream.map(&random_flip(&1, :width))
+    |> Stream.chunk_every(batch_size, batch_size, :discard)
+    |> Stream.map(fn chunks ->
+      {img_chunk, label_chunk} = Enum.unzip(chunks)
+      {Nx.stack(img_chunk), Nx.stack(label_chunk)}
+    end)
+  end
+
+  defp parse_image(path) do
+    label = if String.contains?(path, "cat"), do: 0, else: 1
+
+    case StbImage.read_file(path) do
+      {:ok, img} -> {img, label}
+      _err -> :error
+    end
+  end
+
+  defp to_tensors({:ok, {img, label}}, target_height, target_width) do
+    img_tensor = img
+    |> StbImage.resize(target_height, target_width)
+    |> StbImage.to_nx()
+    |> Nx.divide(255)
+    |> Nx.transpose(axes: [:channels, :height, :width])
+
+    label_tensor = Nx.tensor([label])
+    
+    {img_tensor, label_tensor}
+  end
+
+  defp random_flip({image, label}, axis) do
+    if :rand.uniform() < 0.5 do
+      {Nx.reverse(image, axes: [axis]), label}
+    else
+      {image, label}
+    end
+  end
+end
+```
+
+```elixir
+{:ok, cwd} = File.cwd()
+train_path = "#{cwd}/code/learn_nx_elixir/ml_nx_book/train/*.jpg"
+{test_paths, train_paths} = train_path
+  |> Path.wildcard()
+  |> Enum.shuffle()
+  |> Enum.split(1000)
+{test_paths, val_paths} = Enum.split(test_paths, 750)
+
+batch_size = 32
+target_height = target_width = 160
+train_pipeline = CatsAndDogs.pipeline_with_aug(train_paths, batch_size, target_height, target_width)
+val_pipeline = CatsAndDogs.pipeline(val_paths, batch_size, target_height, target_width)
+test_pipeline = CatsAndDogs.pipeline(test_paths, batch_size, target_height, target_width)
+
+Enum.take(train_pipeline, 1)
+```
+
+```elixir
+  file_path = Kino.FS.file_path("mobilenetv2-7.onnx")
+```
+
+```elixir
+{cnn_base, cnn_base_params} = AxonOnnx.import(file_path, batch_size: batch_size)
+```
+
+```elixir
+input_template = Nx.template({1, 3, target_height, target_width}, :f32)
+Axon.Display.as_graph(cnn_base, input_template)
+```
+
+```elixir
+{_, cnn_base} = Axon.pop_node(cnn_base)
+{_, cnn_base} = Axon.pop_node(cnn_base)
+```
+
+```elixir
+Axon.Display.as_graph(cnn_base, input_template)
+```
+
+```elixir
+cnn_base = Axon.namespace(cnn_base, "feature_extractor")
+```
+
+```elixir
+cnn_base = Axon.freeze(cnn_base)
+```
+
+```elixir
+model = cnn_base
+|> Axon.global_avg_pool(channels: :first)
+|> Axon.dropout(rate: 0.2)
+|> Axon.dense(1)
+```
+
+```elixir
+loss = &Axon.Losses.binary_cross_entropy(&1, &2, reduction: :mean, from_logits: true)
+
+optimizer = Polaris.Optimizers.adam(learning_rate: 1.0e-4)
+
+trained_model_state = model
+|> Axon.Loop.trainer(loss, optimizer)
+|> Axon.Loop.metric(:accuracy)
+|> Axon.Loop.validate(model, val_pipeline)
+|> Axon.Loop.early_stop("validation_loss", mode: :min, patience: 5)
+|> Axon.Loop.run(
+  train_pipeline,
+  %{"feature_extractor" => cnn_base_params},
+  epochs: 100,
+  compiler: EXLA
+)
+```
