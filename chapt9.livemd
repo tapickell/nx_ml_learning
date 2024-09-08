@@ -131,3 +131,50 @@ trained_model_state = model
 |> Axon.Loop.metric(:accuracy)
 |> Axon.Loop.run(train_pipline, %{}, epochs: 10, compiler: EXLA)
 ```
+
+```elixir
+model
+|> Axon.Loop.evaluator()
+|> Axon.Loop.metric(:accuracy)
+|> Axon.Loop.run(test_pipeline, trained_model_state, compiler: EXLA)
+```
+
+## Recurrent Neural Networks
+
+```elixir
+seq = "review"
+|> Axon.input() # sequence {batch_size, seq_length}
+
+embedded = seq
+|> Axon.embedding(n_tokens + 2, batch_size) # embedded {batch_size, seq_length, 64}
+
+mask = seq
+|> Axon.mask(0) # ignore padding tokens
+
+# {{batch_size, seq_lenght, 64}, state}
+{rnn_seq, _state} = Axon.lstm(embedded, 64, mask: mask, unroll: :static) # map_reduce into state
+
+final_token = rnn_seq
+  |> Axon.nx(fn seq -> 
+    Nx.squeeze(seq[[0..-1//1, -1, 0..-1//1]])
+  end)
+
+model = final_token
+|> Axon.dense(64, activation: :relu)
+|> Axon.dense(1)
+```
+
+```elixir
+imput_template = Nx.template({64, 64}, :s64)
+Axon.Display.as_graph(model, imput_template)
+```
+
+```elixir
+loss = &Axon.Losses.binary_cross_entropy(&1, &2, from_logits: true, reduction: :mean)
+optimizer = Polaris.Optimizers.adam(learning_rate: 1.0e-4)
+
+trained_model_state = model
+|> Axon.Loop.trainer(loss, optimizer)
+|> Axon.Loop.metric(:accuracy)
+|> Axon.Loop.run(train_pipline, %{}, epochs: 10, compiler: EXLA)
+```
