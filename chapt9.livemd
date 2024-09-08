@@ -1,0 +1,133 @@
+# Chapt 9 notebook
+
+```elixir
+Mix.install([
+  # {:benchee, "~> 1.3"},
+  # {:explorer, "~> 0.9.1"},
+  {:axon_onnx, git: "https://github.com/mortont/axon_onnx.git", branch: "master"},
+  {:axon, "~> 0.5"},
+  {:nx, "~> 0.5"},
+  {:exla, "~> 0.5"},
+  {:stb_image, "~> 0.6"},
+  {:kino, "~> 0.8"},
+  # {:bumblebee, "~> 0.5.3"},
+  # {:kino_vega_lite, "~> 0.1.13"},
+  # {:scholar, "~> 0.3.1"},
+  {:scidata, "~> 0.1.11"},
+  {:table_rex, "~> 3.1"},
+  # {:tucan, "~> 0.3.0"},
+  # {:vega_lite, "~> 0.1.9"},
+] ,
+   config: [
+     nx: [
+       default_backend: EXLA.Backend,
+       default_defn_options: [compiler: EXLA]
+     ]
+   ]
+)
+```
+
+## Section
+
+```elixir
+data = Scidata.IMDBReviews.download()
+```
+
+```elixir
+{train_data, test_data} = data.review
+|> Enum.zip(data.sentiment)
+|> Enum.shuffle()
+|> Enum.split(23_000)
+```
+
+```elixir
+freq = train_data
+  |> Enum.reduce(%{}, fn {review, _}, tokens ->
+    review
+    |> String.downcase()
+    |> String.replace(~r/[\p{P}\p{S}]/,"")
+    |> String.split()
+    |> Enum.reduce(tokens, &Map.update(&2, &1, 1, fn x -> x + 1 end))
+  end)
+```
+
+```elixir
+n_tokens = 1024
+
+tokens = freq
+|> Enum.sort_by(&elem(&1, 1), :desc)
+|> Enum.take(n_tokens)
+|> Enum.with_index(fn {token, _}, i -> {token, i + 2} end)
+|> Map.new()
+```
+
+```elixir
+tokenize = fn review ->
+  pad_token = 0
+  unkown_token = 1
+  review
+  |> String.downcase()
+  |> String.replace(~r/[\p{P}\p{S}]/,"")
+  |> String.split()
+  |> Enum.map(&Map.get(tokens, &1, unkown_token))
+  |> Nx.tensor()
+  |> then(&Nx.pad(&1, pad_token, [{0, 64 - Nx.size(&1), 0}]))
+end
+```
+
+```elixir
+{review, label} = train_data |> Enum.shuffle() |> hd()
+```
+
+```elixir
+tokenize.(review)
+```
+
+```elixir
+batch_size = 64
+to_pipeline = fn data ->
+  data
+    |> Stream.map(fn {r, l} ->
+    {tokenize.(r), Nx.tensor(l)}
+  end)
+  |> Stream.chunk_every(batch_size, batch_size, :discard)
+  |> Stream.map(fn reviews_and_labels ->
+    {r, l} = Enum.unzip(reviews_and_labels)
+    {Nx.stack(r), Nx.stack(l) |> Nx.new_axis(-1)}
+  end)
+end
+train_pipline = to_pipeline.(train_data)
+
+test_pipeline = to_pipeline.(test_data)
+
+```
+
+```elixir
+Enum.take(train_pipline, 1)
+```
+
+## Basic feed-forward neural network
+
+```elixir
+model = "review"
+|> Axon.input()
+|> Axon.embedding(n_tokens + 2, batch_size)
+|> Axon.flatten()
+|> Axon.dense(64, activation: :relu)
+|> Axon.dense(1)
+```
+
+```elixir
+input_template = Nx.template({64, 64}, :s64)
+Axon.Display.as_graph(model, input_template)
+```
+
+```elixir
+loss = &Axon.Losses.binary_cross_entropy(&1, &2, from_logits: true, reduction: :mean)
+optimizer = Polaris.Optimizers.adam(learning_rate: 1.0e-4)
+
+trained_model_state = model
+|> Axon.Loop.trainer(loss, optimizer)
+|> Axon.Loop.metric(:accuracy)
+|> Axon.Loop.run(train_pipline, %{}, epochs: 10, compiler: EXLA)
+```
