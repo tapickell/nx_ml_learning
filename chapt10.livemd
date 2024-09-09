@@ -1,0 +1,139 @@
+<!-- livebook:{"file_entries":[{"name":"all_stocks_2006-01-01_to_2018-01-01.csv","type":"attachment"}]} -->
+
+# Chapt10 notebook
+
+```elixir
+Mix.install([
+  # {:benchee, "~> 1.3"},
+  {:explorer, "~> 0.8.2"},
+  # {:axon_onnx, git: "https://github.com/mortont/axon_onnx.git", branch: "master"},
+  # {:axon, "~> 0.5"},
+  {:nx, "~> 0.5"},
+  {:exla, "~> 0.5"},
+  # {:stb_image, "~> 0.6"},
+  {:kino, "~> 0.8"},
+  # {:bumblebee, "~> 0.5.3"},
+  {:kino_vega_lite, "~> 0.1.13"},
+  # {:scholar, "~> 0.3.1"},
+  {:scidata, "~> 0.1.8"},
+  # {:table_rex, "~> 3.1"},
+  # {:tucan, "~> 0.3.0"},
+  {:vega_lite, "~> 0.1.9"},
+] ,
+   config: [
+     nx: [
+       default_backend: EXLA.Backend,
+       default_defn_options: [compiler: EXLA]
+     ]
+   ]
+)
+```
+
+## Section
+
+```elixir
+alias VegaLite, as: Vl
+
+csv_file = Kino.FS.file_path("all_stocks_2006-01-01_to_2018-01-01.csv")
+
+df = Explorer.DataFrame.from_csv!(csv_file)
+
+aapl_df = Explorer.DataFrame.filter_with(df, fn d ->
+  Explorer.Series.equal(d["Name"], "AAPL")
+end)
+```
+
+<!-- livebook:{"attrs":"eyJjaGFydF90aXRsZSI6bnVsbCwiaGVpZ2h0Ijo0ODAsImxheWVycyI6W3siYWN0aXZlIjp0cnVlLCJjaGFydF90eXBlIjoibGluZSIsImNvbG9yX2ZpZWxkIjpudWxsLCJjb2xvcl9maWVsZF9hZ2dyZWdhdGUiOm51bGwsImNvbG9yX2ZpZWxkX2JpbiI6bnVsbCwiY29sb3JfZmllbGRfc2NhbGVfc2NoZW1lIjpudWxsLCJjb2xvcl9maWVsZF90eXBlIjpudWxsLCJkYXRhX3ZhcmlhYmxlIjoiYWFwbF9kZiIsImdlb2RhdGFfY29sb3IiOiJibHVlIiwibGF0aXR1ZGVfZmllbGQiOm51bGwsImxvbmdpdHVkZV9maWVsZCI6bnVsbCwieF9maWVsZCI6IkRhdGUiLCJ4X2ZpZWxkX2FnZ3JlZ2F0ZSI6bnVsbCwieF9maWVsZF9iaW4iOm51bGwsInhfZmllbGRfc2NhbGVfdHlwZSI6bnVsbCwieF9maWVsZF90eXBlIjoidGVtcG9yYWwiLCJ5X2ZpZWxkIjoiQ2xvc2UiLCJ5X2ZpZWxkX2FnZ3JlZ2F0ZSI6bnVsbCwieV9maWVsZF9iaW4iOm51bGwsInlfZmllbGRfc2NhbGVfdHlwZSI6bnVsbCwieV9maWVsZF90eXBlIjoicXVhbnRpdGF0aXZlIn1dLCJ2bF9hbGlhcyI6IkVsaXhpci5WbCIsIndpZHRoIjo2NDB9","chunks":null,"kind":"Elixir.KinoVegaLite.ChartCell","livebook_object":"smart_cell"} -->
+
+```elixir
+Vl.new(width: 640, height: 480)
+|> Vl.data_from_values(aapl_df, only: ["Date", "Close"])
+|> Vl.mark(:line)
+|> Vl.encode_field(:x, "Date", type: :temporal)
+|> Vl.encode_field(:y, "Close", type: :quantitative)
+```
+
+```elixir
+Vl.new(title: "DJIA Stock Prices", width: 640, height: 480)
+|> Vl.data_from_values(Explorer.DataFrame.to_columns(df))
+|> Vl.mark(:line, tooltip: true)
+|> Vl.encode_field(:x, "Date", type: :temporal)
+|> Vl.encode_field(:y, "Close", type: :quantitative)
+|> Vl.encode_field(:color, "Name", type: :nominal)
+|> Kino.VegaLite.new()
+```
+
+```elixir
+normalized_aapl_df = Explorer.DataFrame.mutate_with(aapl_df, fn df ->
+  var = Explorer.Series.variance(df["Close"])
+  mean = Explorer.Series.mean(df["Close"])
+  centered = Explorer.Series.subtract(df["Close"], mean)
+  norm = Explorer.Series.divide(centered, var)
+  date = Explorer.Series.cast(df["Date"], :date)
+  ["Close": norm, "Date": date]
+end)
+```
+
+<!-- livebook:{"attrs":"eyJjaGFydF90aXRsZSI6bnVsbCwiaGVpZ2h0Ijo0ODAsImxheWVycyI6W3siYWN0aXZlIjp0cnVlLCJjaGFydF90eXBlIjoibGluZSIsImNvbG9yX2ZpZWxkIjoiTmFtZSIsImNvbG9yX2ZpZWxkX2FnZ3JlZ2F0ZSI6bnVsbCwiY29sb3JfZmllbGRfYmluIjpudWxsLCJjb2xvcl9maWVsZF9zY2FsZV9zY2hlbWUiOm51bGwsImNvbG9yX2ZpZWxkX3R5cGUiOiJub21pbmFsIiwiZGF0YV92YXJpYWJsZSI6Im5vcm1hbGl6ZWRfYWFwbF9kZiIsImdlb2RhdGFfY29sb3IiOiJibHVlIiwibGF0aXR1ZGVfZmllbGQiOm51bGwsImxvbmdpdHVkZV9maWVsZCI6bnVsbCwieF9maWVsZCI6IkRhdGUiLCJ4X2ZpZWxkX2FnZ3JlZ2F0ZSI6bnVsbCwieF9maWVsZF9iaW4iOm51bGwsInhfZmllbGRfc2NhbGVfdHlwZSI6bnVsbCwieF9maWVsZF90eXBlIjoidGVtcG9yYWwiLCJ5X2ZpZWxkIjoiQ2xvc2UiLCJ5X2ZpZWxkX2FnZ3JlZ2F0ZSI6bnVsbCwieV9maWVsZF9iaW4iOm51bGwsInlfZmllbGRfc2NhbGVfdHlwZSI6bnVsbCwieV9maWVsZF90eXBlIjoicXVhbnRpdGF0aXZlIn1dLCJ2bF9hbGlhcyI6IkVsaXhpci5WbCIsIndpZHRoIjo2NDB9","chunks":null,"kind":"Elixir.KinoVegaLite.ChartCell","livebook_object":"smart_cell"} -->
+
+```elixir
+Vl.new(width: 640, height: 480)
+|> Vl.data_from_values(normalized_aapl_df, only: ["Date", "Close", "Name"])
+|> Vl.mark(:line)
+|> Vl.encode_field(:x, "Date", type: :temporal)
+|> Vl.encode_field(:y, "Close", type: :quantitative)
+|> Vl.encode_field(:color, "Name", type: :nominal)
+```
+
+```elixir
+defmodule Data do
+  def window(inputs, window_size, target_window_size) do
+    inputs
+    |> Stream.chunk_every(window_size + target_window_size, 1, :discard)
+    |> Stream.map(fn window ->
+      features = window
+      |> Enum.take(window_size)
+      |> Nx.tensor()
+      |> Nx.new_axis(1)
+
+      targets = window
+      |> Enum.drop(window_size)
+      |> Nx.tensor()
+      |> Nx.new_axis(1)
+
+      {features, targets}
+    end)
+  end
+
+  def batch(inputs, batch_size) do
+    inputs
+    |> Stream.chunk_every(batch_size, :discard)
+    |> Stream.map(fn windows ->
+      {features, targets} = Enum.unzip(windows)
+      {Nx.stack(features, Nx.stack(targets))}
+    end)
+  end
+end
+```
+
+```elixir
+# normalized_aapl_df["Date"]
+# |> IO.inspect(label: :date_col)
+# d = Explorer.Series.to_list(normalized_aapl_df["Date"])
+# d
+# |> hd()
+# |> Date.from_iso8601!()
+#   |> IO.inspect()
+```
+
+```elixir
+train_df = Explorer.DataFrame.filter_with(normalized_aapl_df, fn df ->
+  Explorer.Series.less(df["Date"], Date.new!(2016, 1, 1))
+end)
+
+
+test_df = Explorer.DataFrame.filter_with(normalized_aapl_df, fn df ->
+  Explorer.Series.greater_equal(df["Date"], Date.new!(2016, 1, 1))
+end)
+
+```
